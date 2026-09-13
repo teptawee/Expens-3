@@ -1,7 +1,7 @@
 /* =========================================================
  * ⚙️ CONFIG — ใส่ API URL ของคุณตรงนี้
  * ========================================================= */
-const API_URL = 'https://script.google.com/macros/s/YOUR_ID/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyylMb0W0WOwrh4SASFCwEYGc3DdUj4PMSMeECAWAVwOs4wliHtbk5KRHODqXYI4B8PwQ/exec';
 const CACHE_TTL = 5 * 60 * 1000; // 5 นาที
 
 /* =========================================================
