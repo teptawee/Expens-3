@@ -665,13 +665,15 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <script>
+ <script>
   /* =========================================================
-   * ⚙️ ตั้งค่า API URL ตรงนี้ (ได้จาก Apps Script Web App)
+   * ⚙️ API URL
    * ========================================================= */
   const API_URL = 'https://script.google.com/macros/s/AKfycbyylMb0W0WOwrh4SASFCwEYGc3DdUj4PMSMeECAWAVwOs4wliHtbk5KRHODqXYI4B8PwQ/exec';
+  const CACHE_TTL = 5 * 60 * 1000; // 5 นาที
 
   /* =========================================================
-   * State & helpers (คงเดิม)
+   * State
    * ========================================================= */
   const state = {
     appData: { expenses: [], categories: [], payments: [] },
@@ -696,16 +698,15 @@
   document.addEventListener('DOMContentLoaded', initApp);
 
   /* =========================================================
-   * API client — แทน google.script.run
+   * API client
    * ========================================================= */
   async function apiCall(action, payload) {
-    if (!API_URL || API_URL.includes('XXXXXXXX')) {
+    if (!API_URL || API_URL.includes('YOUR_ID')) {
       throw new Error('กรุณาตั้งค่า API_URL ก่อนใช้งาน');
     }
 
     const res = await fetch(API_URL, {
       method: 'POST',
-      // ใช้ text/plain เพื่อเลี่ยง CORS preflight (Apps Script ไม่รับ OPTIONS)
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action, payload: payload || {} })
     });
@@ -718,12 +719,40 @@
   }
 
   /* =========================================================
+   * LocalStorage cache
+   * ========================================================= */
+  function saveCache(key, data) {
+    try {
+      localStorage.setItem('wallet_' + key, JSON.stringify({
+        t: Date.now(),
+        d: data
+      }));
+    } catch (e) {}
+  }
+
+  function loadCache(key) {
+    try {
+      const raw = localStorage.getItem('wallet_' + key);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (Date.now() - obj.t > CACHE_TTL) return null;
+      return obj.d;
+    } catch (e) { return null; }
+  }
+
+  function clearCache() {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('wallet_'))
+      .forEach(k => localStorage.removeItem(k));
+  }
+
+  /* =========================================================
    * Init
    * ========================================================= */
   function initApp() {
     $('#anchorDate').value = state.anchor;
     bindEvents();
-    loadAppData();
+    bootstrap(); // ⭐ เรียกครั้งเดียว
   }
 
   function bindEvents() {
@@ -731,16 +760,26 @@
       b.addEventListener('click', () => switchPage(b.dataset.page));
     });
 
+    // ⭐ เปลี่ยน period → สลับ dashboard ในเครื่อง ไม่ต้องยิง API
     document.querySelectorAll('.period-tab').forEach(b => b.addEventListener('click', () => {
       state.period = b.dataset.period;
       document.querySelectorAll('.period-tab').forEach(x =>
         x.classList.toggle('active', x.dataset.period === state.period));
-      loadDashboard();
+
+      const map = {
+        day:   state.todayDashboard,
+        week:  state.weekDashboard,
+        month: state.monthDashboard,
+        year:  state.yearDashboard
+      };
+      state.dashboard = map[state.period];
+      renderDashboard();
     }));
 
+    // เปลี่ยนวัน → ยิง API ใหม่ (แต่ period เดิม)
     $('#anchorDate').addEventListener('change', e => {
       state.anchor = e.target.value || getTodayISO();
-      loadDashboard();
+      bootstrap();
     });
 
     $('#openAddExpenseBtn').addEventListener('click', () => openExpenseModal());
@@ -793,50 +832,55 @@
   }
 
   /* =========================================================
-   * Load data
+   * ⭐ Bootstrap — 1 request โหลดทุกอย่าง
    * ========================================================= */
-  async function loadAppData() {
-    showLoading(true);
+  async function bootstrap() {
+    const cacheKey = `boot_${state.period}_${state.anchor}`;
+    const cached = loadCache(cacheKey);
+
+    // 1) แสดงข้อมูลจาก cache ทันที (ถ้ามี) — instant
+    if (cached) {
+      applyBootstrap(cached);
+    } else {
+      showLoading(true);
+    }
+
+    // 2) ยิง API ดึงข้อมูลใหม่ (parallel with UI)
     try {
-      const data = await apiCall('getAppData');
-      state.appData = data || { expenses: [], categories: [], payments: [] };
-      populateFilterOptions();
-      populateComparisonCategoryOptions();
-      await loadDashboard();
-    } catch (err) {
-      handleError(err);
-    } finally {
+      const fresh = await apiCall('getBootstrap', {
+        period: state.period,
+        anchor: state.anchor
+      });
+      saveCache(cacheKey, fresh);
+      applyBootstrap(fresh);
       showLoading(false);
+    } catch (err) {
+      showLoading(false);
+      if (!cached) handleError(err);
+      else showToast('ใช้ข้อมูลที่ cache ไว้ (เชื่อมต่อช้าอยู่)', 'error');
     }
   }
 
-  async function loadDashboard() {
-    showLoading(true);
-    try {
-      const [dash, month, week, today, year] = await Promise.all([
-        apiCall('getDashboard', { period: state.period, anchor: state.anchor }),
-        apiCall('getDashboard', { period: 'month', anchor: state.anchor }),
-        apiCall('getDashboard', { period: 'week', anchor: state.anchor }),
-        apiCall('getDashboard', { period: 'day', anchor: state.anchor }),
-        apiCall('getDashboard', { period: 'year', anchor: state.anchor })
-      ]);
+  /** รับ bootstrap data มาใส่ state + render ทุกส่วน */
+  function applyBootstrap(data) {
+    state.appData = data.appData || { expenses: [], categories: [], payments: [] };
 
-      state.dashboard = dash;
-      state.monthDashboard = month;
-      state.weekDashboard = week;
-      state.todayDashboard = today;
-      state.yearDashboard = year;
+    const d = data.dashboards || {};
+    state.todayDashboard = d.day;
+    state.weekDashboard  = d.week;
+    state.monthDashboard = d.month;
+    state.yearDashboard  = d.year;
 
-      renderStatCards();
-      renderInsights();
-      renderDashboard();
-      renderBudgetSection();
-      renderExpenseList();
-    } catch (err) {
-      handleError(err);
-    } finally {
-      showLoading(false);
-    }
+    // dashboard ปัจจุบัน ตาม period ที่เลือก
+    state.dashboard = d[state.period] || d.day;
+
+    populateFilterOptions();
+    populateComparisonCategoryOptions();
+    renderStatCards();
+    renderInsights();
+    renderDashboard();
+    renderBudgetSection();
+    renderExpenseList();
   }
 
   /* =========================================================
