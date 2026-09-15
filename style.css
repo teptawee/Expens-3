@@ -483,3 +483,141 @@ tbody tr:hover { background:rgba(255,255,255,.5); }
   .stat-num { font-size:20px; }
   .brand h1 { font-size:15px; }
 }
+
+/* =========================================================
+ * Expense Groups — จัดกลุ่มตามวันที่
+ * ========================================================= */
+.expense-groups { display:grid; gap:16px; }
+
+.expense-group {
+  border-radius:20px;
+  background:rgba(255,255,255,.6);
+  border:1px solid var(--glass-border);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  box-shadow:0 6px 20px rgba(122,104,180,.08);
+  overflow:hidden;
+  transition:.25s;
+}
+.expense-group:hover { box-shadow:0 10px 26px rgba(122,104,180,.14); }
+
+.expense-group-header {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:12px; padding:14px 18px;
+  background:linear-gradient(135deg,rgba(240,238,255,.9),rgba(255,240,250,.7));
+  border-bottom:1px solid rgba(199,185,255,.22);
+}
+.date-info { display:flex; align-items:center; gap:12px; min-width:0; }
+.date-emoji {
+  display:grid; place-items:center;
+  width:40px; height:40px; flex:0 0 auto;
+  border-radius:12px;
+  background:linear-gradient(135deg,#e0d7ff,#ffe4f2);
+  font-size:19px;
+  box-shadow:0 4px 12px rgba(199,185,255,.3);
+}
+.date-label {
+  font-weight:700; font-size:14px; color:var(--navy);
+  letter-spacing:-.2px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.date-sub { margin-top:2px; color:var(--muted); font-size:11px; }
+
+.date-badge {
+  padding:3px 10px; border-radius:99px;
+  font-size:10.5px; font-weight:700;
+  letter-spacing:-.1px;
+  flex:0 0 auto;
+}
+.date-badge.today { background:linear-gradient(135deg,#ffd0e6,#ffb8d8); color:#b8296a; }
+.date-badge.yesterday { background:rgba(199,185,255,.35); color:#5b4bc4; }
+
+.date-total { display:flex; align-items:baseline; gap:6px; flex:0 0 auto; }
+.date-total-label { color:var(--muted); font-size:11px; }
+.date-total-value {
+  color:var(--danger); font-size:16px; font-weight:700;
+  letter-spacing:-.3px;
+}
+
+.expense-group-body { padding:6px 8px 8px; }
+
+.expense-row {
+  display:grid;
+  grid-template-columns:44px 1fr auto auto;
+  align-items:center;
+  gap:12px;
+  padding:12px 12px;
+  border-radius:14px;
+  transition:.2s;
+}
+.expense-row + .expense-row { border-top:1px solid rgba(199,185,255,.14); }
+.expense-row:hover { background:rgba(255,255,255,.7); }
+
+.expense-row-icon {
+  display:grid; place-items:center;
+  width:40px; height:40px;
+  border-radius:12px;
+  background:linear-gradient(135deg,#f5f0ff,#fff5fa);
+  font-size:19px;
+  box-shadow:0 3px 10px rgba(199,185,255,.2);
+}
+
+.expense-row-main { min-width:0; }
+.expense-row-title {
+  font-weight:600; font-size:13.5px; color:var(--text);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.expense-row-meta {
+  margin-top:4px;
+  display:flex; flex-wrap:wrap; gap:6px;
+  align-items:center;
+}
+.meta-tag {
+  padding:2px 8px; border-radius:8px;
+  background:rgba(199,185,255,.16);
+  color:#5b4bc4; font-size:10.5px; font-weight:500;
+  white-space:nowrap;
+}
+.meta-note {
+  color:var(--muted); font-size:11px;
+  max-width:220px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
+.expense-row-amount {
+  color:var(--danger); font-weight:700; font-size:14px;
+  white-space:nowrap; text-align:right;
+  min-width:90px;
+}
+.expense-row-actions { display:flex; gap:6px; }
+
+/* =========================================================
+ * Mobile — ปรับ layout
+ * ========================================================= */
+@media(max-width:760px) {
+  .expense-group-header { padding:12px 14px; }
+  .date-emoji { width:36px; height:36px; font-size:17px; }
+  .date-label { font-size:13px; }
+  .date-total-value { font-size:14.5px; }
+
+  .expense-row {
+    grid-template-columns:40px 1fr auto;
+    gap:10px;
+    padding:11px 10px;
+  }
+  .expense-row-icon { width:36px; height:36px; font-size:17px; }
+  .expense-row-amount {
+    grid-column:2 / 3;
+    justify-self:start;
+    font-size:13.5px;
+    min-width:0;
+    text-align:left;
+    margin-top:4px;
+  }
+  .expense-row-actions {
+    grid-column:3 / 4;
+    grid-row:1 / 3;
+    align-self:center;
+  }
+  .meta-note { max-width:160px; }
+}
