@@ -2,7 +2,7 @@
  * ⚙️ CONFIG — ใส่ API URL ของคุณตรงนี้
  * ========================================================= */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyylMb0W0WOwrh4SASFCwEYGc3DdUj4PMSMeECAWAVwOs4wliHtbk5KRHODqXYI4B8PwQ/exec';
-const CACHE_TTL = 5 * 60 * 1000; // 5 นาที
+const CACHE_TTL = 5 * 60 * 1000;
 
 /* =========================================================
  * State
@@ -28,10 +28,8 @@ const state = {
 
 const $ = s => document.querySelector(s);
 
-// ⭐ รอ Chart.js โหลดเสร็จด้วย (เพราะใช้ defer)
 window.addEventListener('DOMContentLoaded', () => {
   if (typeof Chart === 'undefined') {
-    // ถ้า Chart ยังไม่มา รออีกนิด
     const t = setInterval(() => {
       if (typeof Chart !== 'undefined') {
         clearInterval(t);
@@ -654,9 +652,6 @@ function populateComparisonCategoryOptions() {
 }
 
 /* =========================================================
- * Render — Expense List
- * ========================================================= */
-/* =========================================================
  * Render — Expense List (จัดกลุ่มตามวันที่)
  * ========================================================= */
 function renderExpenseList() {
@@ -687,8 +682,7 @@ function renderExpenseList() {
     return;
   }
 
-  // ⭐ จัดกลุ่มตามวันที่
-  const groups = groupByDate(data, cats, pays);
+  const groups = groupByDate(data);
 
   const groupsHtml = groups.map(g => {
     const itemsHtml = g.items.map(x => {
@@ -786,9 +780,20 @@ function groupByDate(items) {
     g.items.push(x);
     g.total += Number(x.amount || 0);
   });
-  // เรียงวันที่ใหม่ → เก่า
   return [...map.values()].sort((a, b) => b.date.localeCompare(a.date));
 }
+
+function matchesFilters(x, cats, pays) {
+  const c = cats.find(i => i.id === x.category) || {};
+  const p = pays.find(i => i.id === x.payment) || {};
+  const q = state.filters.search.trim().toLowerCase();
+  const text = [x.item, x.note, c.name, p.name].join(' ').toLowerCase();
+  return (!q || text.includes(q)) &&
+    (!state.filters.date || x.date === state.filters.date) &&
+    (!state.filters.category || x.category === state.filters.category) &&
+    (!state.filters.payment || x.payment === state.filters.payment);
+}
+
 /* =========================================================
  * Modal — Expense
  * ========================================================= */
@@ -981,8 +986,8 @@ function formatThaiDate(value) {
   const d = new Date(`${value}T12:00:00`);
   if (Number.isNaN(d.getTime())) return '-';
   return new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
-
-  function formatThaiDateFull(value) {
+}
+function formatThaiDateFull(value) {
   if (!value) return '-';
   const d = new Date(`${value}T12:00:00`);
   if (Number.isNaN(d.getTime())) return '-';
@@ -993,7 +998,6 @@ function formatThaiDate(value) {
   const month = months[d.getMonth()];
   const year = d.getFullYear() + 543;
   return `${dayName}ที่ ${day} ${month} ${year}`;
-}
 }
 function getTodayISO() {
   const d = new Date();
@@ -1006,7 +1010,6 @@ function escapeHtml(value) {
 }
 function escapeAttribute(value) { return escapeHtml(value); }
 
-/* ⭐ เปิดให้ onclick="..." ใน HTML เข้าถึงได้ */
 window.openExpenseModal = openExpenseModal;
 window.closeModal = closeModal;
 window.editExpense = editExpense;
