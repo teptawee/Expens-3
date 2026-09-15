@@ -656,6 +656,9 @@ function populateComparisonCategoryOptions() {
 /* =========================================================
  * Render — Expense List
  * ========================================================= */
+/* =========================================================
+ * Render — Expense List (จัดกลุ่มตามวันที่)
+ * ========================================================= */
 function renderExpenseList() {
   const box = $('#expenseTableContainer');
   const cats = state.appData.categories || [];
@@ -684,24 +687,70 @@ function renderExpenseList() {
     return;
   }
 
-  const htmlRows = data.map(x => {
-    const c = cats.find(i => i.id === x.category) || { name: 'อื่นๆ', icon: '✨' };
-    const p = pays.find(i => i.id === x.payment) || { name: 'ไม่ระบุ', icon: '💳' };
-    return `<tr>
-      <td data-label="รายการ"><div class="expense-name">${escapeHtml(c.icon)} ${escapeHtml(x.item || '-')}</div>${x.note ? `<div class="expense-note">${escapeHtml(x.note)}</div>` : ''}</td>
-      <td data-label="วันที่">${formatThaiDate(x.date)}</td>
-      <td data-label="หมวดหมู่">${escapeHtml(c.name)}</td>
-      <td data-label="ชำระโดย">${escapeHtml(p.icon)} ${escapeHtml(p.name)}</td>
-      <td data-label="จำนวนเงิน" class="amount">${formatCurrency(x.amount)}</td>
-      <td data-label="จัดการ"><div class="action-buttons">
-        <button class="icon-btn" type="button" onclick="editExpense('${escapeAttribute(x.id)}')">✏️</button>
-        <button class="icon-btn" type="button" onclick="confirmDeleteExpense('${escapeAttribute(x.id)}')">🗑️</button>
-      </div></td>
-    </tr>`;
+  // ⭐ จัดกลุ่มตามวันที่
+  const groups = groupByDate(data, cats, pays);
+
+  const groupsHtml = groups.map(g => {
+    const itemsHtml = g.items.map(x => {
+      const c = cats.find(i => i.id === x.category) || { name: 'อื่นๆ', icon: '✨' };
+      const p = pays.find(i => i.id === x.payment) || { name: 'ไม่ระบุ', icon: '💳' };
+      return `
+        <div class="expense-row">
+          <div class="expense-row-icon">${escapeHtml(c.icon)}</div>
+          <div class="expense-row-main">
+            <div class="expense-row-title">${escapeHtml(x.item || '-')}</div>
+            <div class="expense-row-meta">
+              <span class="meta-tag">${escapeHtml(c.name)}</span>
+              <span class="meta-tag">${escapeHtml(p.icon)} ${escapeHtml(p.name)}</span>
+              ${x.note ? `<span class="meta-note" title="${escapeAttribute(x.note)}">📝 ${escapeHtml(x.note)}</span>` : ''}
+            </div>
+          </div>
+          <div class="expense-row-amount">${formatCurrency(x.amount)}</div>
+          <div class="expense-row-actions">
+            <button class="icon-btn" type="button" onclick="editExpense('${escapeAttribute(x.id)}')" title="แก้ไข">✏️</button>
+            <button class="icon-btn" type="button" onclick="confirmDeleteExpense('${escapeAttribute(x.id)}')" title="ลบ">🗑️</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const dayLabel = formatThaiDateFull(g.date);
+    const isToday = g.date === getTodayISO();
+    const isYesterday = (() => {
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      return new Date(y.getTime() - y.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    })();
+
+    const badge = isToday
+      ? `<span class="date-badge today">วันนี้</span>`
+      : isYesterday
+      ? `<span class="date-badge yesterday">เมื่อวาน</span>`
+      : '';
+
+    return `
+      <div class="expense-group">
+        <div class="expense-group-header">
+          <div class="date-info">
+            <span class="date-emoji">📅</span>
+            <div>
+              <div class="date-label">${escapeHtml(dayLabel)}</div>
+              <div class="date-sub">${g.items.length} รายการ</div>
+            </div>
+            ${badge}
+          </div>
+          <div class="date-total">
+            <span class="date-total-label">รวม</span>
+            <span class="date-total-value">${formatCurrency(g.total)}</span>
+          </div>
+        </div>
+        <div class="expense-group-body">${itemsHtml}</div>
+      </div>
+    `;
   }).join('');
 
   box.innerHTML = `
-    <div class="table-wrap"><table><thead><tr><th>รายการ</th><th>วันที่</th><th>หมวดหมู่</th><th>ชำระโดย</th><th>จำนวนเงิน</th><th>จัดการ</th></tr></thead><tbody>${htmlRows}</tbody></table></div>
+    <div class="expense-groups">${groupsHtml}</div>
     <div class="pagination-bar">
       <div class="pagination-info">แสดง ${start + 1}-${end} จาก ${total.toLocaleString('th-TH')} รายการ</div>
       <div class="pagination-actions">
@@ -727,17 +776,19 @@ function renderExpenseList() {
   });
 }
 
-function matchesFilters(x, cats, pays) {
-  const c = cats.find(i => i.id === x.category) || {};
-  const p = pays.find(i => i.id === x.payment) || {};
-  const q = state.filters.search.trim().toLowerCase();
-  const text = [x.item, x.note, c.name, p.name].join(' ').toLowerCase();
-  return (!q || text.includes(q)) &&
-    (!state.filters.date || x.date === state.filters.date) &&
-    (!state.filters.category || x.category === state.filters.category) &&
-    (!state.filters.payment || x.payment === state.filters.payment);
+/** จัดกลุ่มรายการตามวันที่ */
+function groupByDate(items) {
+  const map = new Map();
+  items.forEach(x => {
+    const key = x.date || 'unknown';
+    if (!map.has(key)) map.set(key, { date: key, items: [], total: 0 });
+    const g = map.get(key);
+    g.items.push(x);
+    g.total += Number(x.amount || 0);
+  });
+  // เรียงวันที่ใหม่ → เก่า
+  return [...map.values()].sort((a, b) => b.date.localeCompare(a.date));
 }
-
 /* =========================================================
  * Modal — Expense
  * ========================================================= */
@@ -930,6 +981,19 @@ function formatThaiDate(value) {
   const d = new Date(`${value}T12:00:00`);
   if (Number.isNaN(d.getTime())) return '-';
   return new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+
+  function formatThaiDateFull(value) {
+  if (!value) return '-';
+  const d = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return '-';
+  const days = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+  const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const dayName = days[d.getDay()];
+  const day = d.getDate();
+  const month = months[d.getMonth()];
+  const year = d.getFullYear() + 543;
+  return `${dayName}ที่ ${day} ${month} ${year}`;
+}
 }
 function getTodayISO() {
   const d = new Date();
